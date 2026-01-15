@@ -6,7 +6,7 @@
 set -e
 
 # Variables
-BASE_URL="https://yKicchan.github.io/awesome-marp-template"
+BASE_URL="https://haruyuki-16278.github.io/slides"
 SRC_DIR="src"
 SLIDE_FILENAME="index.md"
 OGP_FILENAME="index.png"

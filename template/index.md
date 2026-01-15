@@ -1,8 +1,8 @@
 ---
 marp: true
-theme: yKicchan
+theme: haruyuki-16278
 paginate: true
-image: https://yKicchan.github.io/awesome-marp-template/{{PATH}}/index.png
+image: https://haruyuki-16278.github.io/slides/{{PATH}}/index.png
 title:
 description:
 keywords:
