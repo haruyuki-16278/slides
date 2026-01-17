@@ -188,11 +188,31 @@ AWS IoT系サービスは
 
 ---
 
+:::_ {.text-xl5 .center .pt-1}
+使ってみたい！
+:::
+
+---
+
+## 話の流れ
+
+1. 作りたかったもの 🏢
+2. AWS IoT との出会い 🤝
+3. **M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air**{.text-lg}
+4. SIM7080G 💔 AWS IoT ...?
+5. ---------- ㊙️ ----------
+6. まとめ
+
+---
+
 <!-- header: 3. M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air -->
 
 ## M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air
 
-<!-- TODO: この組み合わせ、行けるらしい -->
+:::_ {.text-xl2 .center}
+この組み合わせ、いけるらしい
+![h:300px](./images/qiita.png)
+:::
 
 ---
 
@@ -204,96 +224,313 @@ AWS IoT系サービスは
 
 ---
 
-### 使うとこんな感じ
+### こんな感じ
 
-M5StickC -(==**LTE**=={.red}/mqtt)-> AWS IoT Gateway -(rules)-> DynamoDB
+:::_ {.center .pt-1}
+![w:1000px](./images/aws-iot-architecture-lte.png)
+:::
 
 ---
 
 ### 買っちった 🛒
 
-<!-- TODO: 購入した製品の写真や説明 -->
+:::_ {.center .pt-1}
+![w:750px](./images/switch-science.png)
+:::
+
+---
+
+### 買っちった 🛒
+
+:::_ {.center .pt-1}
+![h:500px](./images/real-unit.JPG)
+:::
+
+---
+
+### 買っちった 🛒
+
+:::_ {.center .pt-1}
+![w:1000px](./images/soracom-bought.png)
+:::
+
+---
+
+## 話の流れ
+
+1. 作りたかったもの 🏢
+2. AWS IoT との出会い 🤝
+3. M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air
+4. **SIM7080G 💔 AWS IoT ...?**{.text-lg}
+5. ---------- ㊙️ ----------
+6. まとめ
 
 ---
 
 <!-- header: 4. SIM7080G 💔 AWS IoT ...? -->
 
-## SIM7080G 💔 AWS IoT ...?
+## SIM7080G 💔 AWS IoT ...
 
-いざ動かしてみると...
+:::_ {.text-xl2 .pt-1 .center}
+とりあえず動かしてみよう
+
+==💪=={.text-xl5}
+:::
 
 ---
 
 ### 動かしてみた① (M5 + WiFi + AWS IoT)
 
-<!-- TODO: Thing以外は基本terraformで作る -->
+Thing以外は基本terraformで作る
+
+```terraform
+resource "aws_iot_topic_rule" "save_to_dynamodb" {
+  name        = "${replace(var.prefix, "-", "_")}_save_to_dynamodb"
+  description = "IoTデータをDynamoDBに保存"
+  enabled     = true
+  sql         = "SELECT * FROM 'devices/+/data'"
+  sql_version = "2016-03-23"
+
+  dynamodbv2 {
+    role_arn = aws_iam_role.iot_rule_role.arn
+    put_item {
+      table_name = var.dynamodb_data_table_name
+    }
+  }
+
+  error_action {
+    cloudwatch_logs {
+      log_group_name = aws_cloudwatch_log_group.iot_errors.name
+      role_arn       = aws_iam_role.iot_rule_role.arn
+    }
+  }
+}
+```
 
 ---
 
-### ThingはDenoで登録しやすく
+ThingはDenoで登録しやすく
 
-## 実はArduinoにもCLIってあって...
+```typescript
+import { $ } from "jsr:@david/dax";
+import { colors } from "jsr:@cliffy/ansi@1.0.0-rc.8/colors";
+import { Confirm } from "jsr:@cliffy/prompt@^1.0.0-rc.8";
+import { parseArgs } from "@std/cli/parse-args";
 
-M5StickCの開発にはArduinoを利用
+const POLICY_NAME = "m5-soraws_pubsub_anytopic";
 
-ただ...
+const { name } = parseArgs(Deno.args);
+if (!name) {
+  throw new Error(`IoT Thing の name を与えてください。`);
+}
 
-AWSで証明書を発行 → ソースコードにコピペ → 書き込み
-↑面倒
+// リポジトリルートに移動
+const root = await $`git rev-parse --show-toplevel`.text();
+Deno.chdir(root);
 
-↓
+// 証明書を保存するディレクトリを作成
+const certDir = `.certs/${name}`;
+await $`mkdir -p ${certDir}`;
 
-SORACOMのSIM IDを使ってAWS IoTのデバイス管理をやれば楽なのでは...?
+// aws cliを実行するプロファイルを取得
+const awsProfileRaw =
+  await $`aws configure list | grep -e profile -e region | awk '{print $2}'`
+    .stdout("piped");
+const [profile, region] = awsProfileRaw.stdout.replaceAll(" ", "").split("\n");
+
+// 確認
+const awsProfileOk = await Confirm.prompt(
+  `次のaws-cliプロファイルを使用します: ${
+    colors.green(profile === "<not" ? "default" : profile)
+  }@${colors.cyan(region)}`,
+);
+if (!awsProfileOk) {
+  console.log(colors.red("終了します"));
+  Deno.exit(1);
+}
+
+const nameOk = await Confirm.prompt(
+  `次の名前でIoT Thingを作成します: ${colors.green(name)}`,
+);
+const nameAlreadyUsed = (await $`aws iot list-things`.stdout("piped")).stdout
+  .includes("name");
+if (!nameOk || nameAlreadyUsed) {
+  console.log(colors.red("終了します"));
+  Deno.exit(1);
+}
+
+// aws cliでthingを作成
+await $`aws iot create-thing --thing-name ${name}`.stdout("piped");
+// 証明書を作成
+await $`aws iot create-keys-and-certificate \
+  --set-as-active \
+  --certificate-pem-outfile ${certDir}/cert.pem \
+  --private-key-outfile ${certDir}/private.key \
+  --public-key-outfile ${certDir}/public.key
+`.stdout("piped");
+// 証明書ARNを取得
+const certificateARN =
+  (await $`aws iot list-certificates --query 'certificates[0].certificateArn' --output text`
+    .stdout("piped")).stdout.trim();
+console.log(colors.gray(certificateARN));
+// アタッチ
+await $`aws iot attach-policy --policy-name ${POLICY_NAME} --target ${certificateARN}`
+  .stdout("piped");
+await $`aws iot attach-thing-principal --thing-name ${name} --principal ${certificateARN}`
+  .stdout("piped");
+
+console.log(`IoT Thing として ${colors.green(name)} を登録しました。`);
+```
 
 ---
 
-Arduino CLI 
+ThingはDenoで登録しやすく
+
+```typescript
+// 前略
+
+// aws cliでthingを作成
+await $`aws iot create-thing --thing-name ${name}`.stdout("piped");
+// 証明書を作成
+await $`aws iot create-keys-and-certificate \
+  --set-as-active \
+  --certificate-pem-outfile ${certDir}/cert.pem \
+  --private-key-outfile ${certDir}/private.key \
+  --public-key-outfile ${certDir}/public.key
+`.stdout("piped");
+// 証明書ARNを取得
+const certificateARN =
+  (await $`aws iot list-certificates --query 'certificates[0].certificateArn' --output text`
+    .stdout("piped")).stdout.trim();
+console.log(colors.gray(certificateARN));
+// アタッチ
+await $`aws iot attach-policy --policy-name ${POLICY_NAME} --target ${certificateARN}`
+  .stdout("piped");
+await $`aws iot attach-thing-principal --thing-name ${name} --principal ${certificateARN}`
+  .stdout("piped");
+```
 
 ---
 
-Deno + Dax で 3つのCLIをいい感じに組み合わせよう！
+### arduino-cli
+
+```shell
+python:3.12.7
+node:v22.13.0
+haruyuki@hailstorm 13:50:56 土 17 ~/private/m5-soraws/device master
+% arduino-cli compile --fqbn esp32:esp32:m5stack_stickc wifi-mqtt
+最大3145728バイトのフラッシュメモリのうち、スケッチが1079087バイト（34%）を使っています。
+最大327680バイトのRAMのうち、グローバル変数が48072バイト（14%）を使っていて、ローカル変数で279608バイト使うことができます。
+
+python:3.12.7
+node:v22.13.0
+haruyuki@hailstorm 13:53:38 土 17 ~/private/m5-soraws/device master
+% arduino-cli upload -p /dev/cu.usbserial-B552A7EA45 --fqbn esp32:esp32:m5stack_stickc wifi-mqtt
+esptool v5.1.0
+Connected to ESP32 on /dev/cu.usbserial-B552A7EA45:
+Chip type:          ESP32-PICO-D4 (revision v1.0)
+Features:           Wi-Fi, BT, Dual Core + LP Core, 240MHz, Embedded Flash, Vref calibration in eFuse, Coding Scheme None
+Crystal frequency:  40MHz
+MAC:                d8:a0:1d:50:f5:00
+
+Stub flasher running.
+Changing baud rate to 1500000...
+Changed.
+
+Configuring flash size...
+Flash will be erased from 0x00001000 to 0x00007fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x0000e000 to 0x0000ffff...
+Flash will be erased from 0x00010000 to 0x00117fff...
+Wrote 25184 bytes (16079 compressed) at 0x00001000 in 0.6 seconds (344.9 kbit/s).
+Hash of data verified.
+Wrote 3072 bytes (137 compressed) at 0x00008000 in 0.1 seconds (438.4 kbit/s).
+Hash of data verified.
+Wrote 8192 bytes (47 compressed) at 0x0000e000 in 0.1 seconds (584.5 kbit/s).
+Hash of data verified.
+Wrote 1079232 bytes (687982 compressed) at 0x00010000 in 10.0 seconds (862.6 kbit/s).
+Hash of data verified.
+
+Hard resetting via RTS pin...
+New upload port: /dev/cu.usbserial-B552A7EA45 (serial)
+```
 
 ---
 
 ### mqtt動く！ ✅
 
-<!-- TODO: WiFi経由でMQTT通信が成功した様子 -->
+:::_ {.center}
+![h:500px](./images/mqtt-testclient.png)
+:::
 
 ---
 
 ### 動かしてみた② (M5 + LTE + 適当なWebサイト)
 
-<!-- TODO: soracom cliで接続の確認 -->
+:::_ {.text-xl2 .pt-1 .center}
+スクショないです
 
----
+==🙇=={.text-xl5}
 
-### HTTPリクエストできた！ ✅
-
-<!-- TODO: LTE経由でHTTPリクエストが成功した様子 -->
+==動きました=={.black}
+:::
 
 ---
 
 ### 動かしてみた③ (M5 + LTE + AWS IoT)
 
-❌ **だめで草**
+
+:::_ {.text-xl2 .pt-1 .center}
+==❌=={.text-xl5}
+
+適当に作るだけだとぜ〜んぜん動かない
+:::
 
 ---
 
 ### 何がダメだったのか
 
+#### MQTTS 対応
+
 ATコマンドで証明書をCAT-M/NB-IoTモジュール(SIM7080G)に入れる必要があった
 
-😇😇😇
+ATコマンド... 🤔 ❓
 
 ---
 
-<!-- header: 5. ㊙️ -->
+## 話の流れ
 
-## ---------- ㊙️ ----------
+1. 作りたかったもの 🏢
+2. AWS IoT との出会い 🤝
+3. M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air
+4. SIM7080G 💔 AWS IoT ...?
+5. **---------- ㊙️ ----------**{.text-lg}
+6. まとめ
+
+---
+
+## 話の流れ
+
+1. 作りたかったもの 🏢
+2. AWS IoT との出会い 🤝
+3. M5Stack CAT-M/NB-IoT+GNSS ユニット ❤️ SORACOM Air
+4. SIM7080G 💔 AWS IoT ...?
+5. **CAT-M/NB-IoT ❤️‍🩹 API Gateway**{.text-lg}
+6. まとめ
+
+---
+
+<!-- header: 5. CAT-M/NB-IoT ❤️‍🩹 API Gateway -->
 
 ### CAT-M/NB-IoT ❤️‍🩹 API Gateway
 
 <!-- TODO: AWS IoT Core を諦めて、API Gateway 経由に変更した話 -->
+
+:::_ {.center .pt-1}
+![w:1000px](./images/api-gateway-architecture.png)
+
+==こうなっちゃった 🤪=={.text-xl2}
+:::
 
 ---
 
@@ -302,10 +539,11 @@ ATコマンドで証明書をCAT-M/NB-IoTモジュール(SIM7080G)に入れる�
 ## まとめ
 
 - **諦めも肝心だよね** 😅
-  <!-- TODO: AWS IoT Core は素晴らしいけど、ハードウェアの制約もある -->
+  - 諦めたあと、二の矢を用意しやすいので==aws=={.aws-color}はいいぞ
 
 - **とはいえ...**
-  - IoT Core 使えますって言いたいので誰か助けてください 🙏
+  - AWS IoT 使えますって言いたい！
+    - 誰か助けてください 🙏
 
 ---
 
