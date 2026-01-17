@@ -55,3 +55,12 @@ marp-pre {
 :not(marp-pre) code {
   border-radius: 8px;
 }
+
+/* blockquote */
+blockquote {
+  width: fit-content;
+  background-color: #eee;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1em; 
+}
