@@ -468,18 +468,14 @@ New upload port: /dev/cu.usbserial-B552A7EA45 (serial)
 
 ### 動かしてみた② (M5 + LTE + 適当なWebサイト)
 
-:::_ {.text-xl2 .pt-1 .center}
-スクショないです
-
-==🙇=={.text-xl5}
-
-==動きました=={.black}
+:::_ {.text-xl2 .center}
+動いた！
+![h:500px](./images/http.png)
 :::
 
 ---
 
 ### 動かしてみた③ (M5 + LTE + AWS IoT)
-
 
 :::_ {.text-xl2 .pt-1 .center}
 ==❌=={.text-xl5}
